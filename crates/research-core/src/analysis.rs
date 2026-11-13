@@ -75,14 +75,28 @@ pub fn analyse(run: &Run, texts: &HashMap<String, String>) -> Analysis {
         .iter()
         .map(|s| texts.get(&s.id).map(|t| shingles(t)).unwrap_or_default())
         .collect();
+    // Origins are derived from the url now, not as stored when fetched, so a better rule
+    // also corrects older runs.
+    let origins: Vec<String> = read
+        .iter()
+        .map(|s| {
+            crate::url::origin(&s.canonical).unwrap_or_else(|| {
+                s.fetched
+                    .as_ref()
+                    .map(|f| f.origin.clone())
+                    .unwrap_or_default()
+            })
+        })
+        .collect();
     let items: Vec<Item<'_>> = read
         .iter()
         .zip(&sh)
-        .map(|(s, sh)| {
+        .zip(&origins)
+        .map(|((s, sh), origin)| {
             let f = s.fetched.as_ref().expect("read sources are fetched");
             Item {
                 canonical: &s.canonical,
-                origin: &f.origin,
+                origin,
                 links: &f.links,
                 shingles: sh,
             }

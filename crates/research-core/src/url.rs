@@ -162,7 +162,13 @@ pub fn origin(url: &str) -> Option<String> {
     if DOCUMENT_HOSTS.contains(&p.host.as_str()) {
         return Some(c);
     }
-    if AUTHOR_PATH_HOSTS.contains(&p.host.as_str()) {
+    // Raw files speak for the GitHub account that owns them.
+    let host = if p.host == "raw.githubusercontent.com" {
+        "github.com".to_owned()
+    } else {
+        p.host
+    };
+    if AUTHOR_PATH_HOSTS.contains(&host.as_str()) {
         let author = p
             .path
             .trim_start_matches('/')
@@ -170,14 +176,14 @@ pub fn origin(url: &str) -> Option<String> {
             .next()
             .unwrap_or_default();
         return Some(if author.is_empty() {
-            p.host
+            host
         } else {
-            format!("{}/{}", p.host, author.to_lowercase())
+            format!("{host}/{}", author.to_lowercase())
         });
     }
-    let s = site(&p.host);
-    if TENANT_SITES.contains(&s.as_str()) && p.host != s {
-        return Some(p.host);
+    let s = site(&host);
+    if TENANT_SITES.contains(&s.as_str()) && host != s {
+        return Some(host);
     }
     Some(s)
 }
@@ -266,6 +272,15 @@ mod tests {
         assert_eq!(
             o("https://github.com/alice/x"),
             o("https://github.com/Alice/z")
+        );
+        // Regression: two owners' raw files were one voice ("githubusercontent.com").
+        assert_ne!(
+            o("https://raw.githubusercontent.com/paperclipai/paperclip/master/README.md"),
+            o("https://raw.githubusercontent.com/open-telemetry/semconv/main/a.md")
+        );
+        assert_eq!(
+            o("https://raw.githubusercontent.com/alice/x/main/README.md"),
+            o("https://github.com/alice/x")
         );
         assert_ne!(
             o("https://arxiv.org/abs/1"),

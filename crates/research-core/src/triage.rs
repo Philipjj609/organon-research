@@ -59,6 +59,7 @@ const PRIMARY_HOSTS: &[&str] = &[
     "rfc-editor.org",
     "datatracker.ietf.org",
     "github.com",
+    "raw.githubusercontent.com",
     "gitlab.com",
     "pubmed.ncbi.nlm.nih.gov",
     "ncbi.nlm.nih.gov",
@@ -237,6 +238,14 @@ mod tests {
             Class::Practitioner
         );
         assert_eq!(class("https://example.com/about", "About"), Class::Unknown);
+        // Regression: a raw README was Unknown while its repo page was Primary.
+        assert_eq!(
+            class(
+                "https://raw.githubusercontent.com/a/b/main/README.md",
+                "README"
+            ),
+            Class::Primary
+        );
     }
 
     #[test]
