@@ -94,6 +94,19 @@ pub struct SourceRec {
     pub fetched: Option<Fetched>,
 }
 
+impl SourceRec {
+    /// Who speaks: derived from the url with today's rules (so older runs benefit from better
+    /// ones), else as stored when fetched.
+    #[must_use]
+    pub fn origin(&self) -> String {
+        crate::url::origin(&self.canonical).unwrap_or_else(|| {
+            self.fetched
+                .as_ref()
+                .map_or_else(|| self.canonical.clone(), |f| f.origin.clone())
+        })
+    }
+}
+
 /// What fetching a source gave.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Fetched {
@@ -401,6 +414,22 @@ mod tests {
             },
             links: vec![],
         }
+    }
+
+    #[test]
+    fn origins_use_todays_rules_not_the_stored_ones() {
+        // Regression: export labelled voices with the origin stored at fetch time
+        // ("githubusercontent.com") after the rule had been fixed.
+        let s = SourceRec {
+            id: "S1".into(),
+            url: "https://raw.githubusercontent.com/alice/x/main/README.md".into(),
+            canonical: "https://raw.githubusercontent.com/alice/x/main/README.md".into(),
+            title: String::new(),
+            snippet: String::new(),
+            found_by: vec![],
+            fetched: Some(fetched("githubusercontent.com")),
+        };
+        assert_eq!(s.origin(), "github.com/alice");
     }
 
     #[test]

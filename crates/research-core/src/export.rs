@@ -62,7 +62,7 @@ pub fn export(
             "web-page"
         };
         let mut meta = serde_json::Map::new();
-        meta.insert("origin".into(), J::from(f.origin.clone()));
+        meta.insert("origin".into(), J::from(s.origin()));
         meta.insert(
             "class".into(),
             serde_json::to_value(f.triage.class).unwrap_or(J::Null),
@@ -137,10 +137,7 @@ pub fn export(
             st.support
                 .iter()
                 .filter_map(|s| run.source(s).ok())
-                .map(|s| s
-                    .fetched
-                    .as_ref()
-                    .map_or(s.canonical.clone(), |f| f.origin.clone()))
+                .map(|s| s.origin())
                 .collect::<Vec<_>>()
                 .join(", ")
         )];
