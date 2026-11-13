@@ -171,7 +171,8 @@ pub fn decode(s: &str) -> String {
     while let Some(amp) = rest.find('&') {
         out.push_str(&rest[..amp]);
         rest = &rest[amp..];
-        let Some(semi) = rest[..rest.len().min(12)].find(';') else {
+        // Bytes, not a str slice: 12 bytes may end inside a multi-byte character.
+        let Some(semi) = rest.bytes().take(12).position(|b| b == b';') else {
             out.push('&');
             rest = &rest[1..];
             continue;
@@ -395,6 +396,13 @@ mod tests {
             decode("a &amp; b &#8212; c &#x2019; &bogus; d &"),
             "a & b — c ’ &bogus; d &"
         );
+    }
+
+    #[test]
+    fn an_ampersand_before_multibyte_text_does_not_panic() {
+        // Regression: the entity window ended inside '│' and panicked.
+        assert_eq!(decode("&ab ──│ x;"), "&ab ──│ x;");
+        assert_eq!(decode("R&Dx ──│ &amp;"), "R&Dx ──│ &");
     }
 
     #[test]
