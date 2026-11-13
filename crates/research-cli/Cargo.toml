@@ -1,0 +1,24 @@
+[package]
+name = "organon-research"
+description = "Research with receipts: search, fetch, triage, verify quoted passages, track corroboration and saturation, export to memory."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "organon-research"
+path = "src/main.rs"
+
+[dependencies]
+organon-research-core = { path = "../research-core" }
+organon-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ureq = "2"
+
+[lints]
+workspace = true
