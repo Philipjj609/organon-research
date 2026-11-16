@@ -22,7 +22,29 @@ pub struct Word {
     pub end: usize,
 }
 
-/// Words of `text`: maximal runs of letters and digits, lowercased, with char offsets.
+/// Scripts written without spaces between words: Han, Kana and Hangul. Each character counts
+/// as one word, since a run of them with no spaces would otherwise be one long "word".
+fn is_cjk(c: char) -> bool {
+    matches!(u32::from(c),
+        0x1100..=0x11FF       // Hangul Jamo
+        | 0x2E80..=0x2FDF     // CJK radicals, Kangxi radicals
+        | 0x3005..=0x3007     // 々 〆 〇
+        | 0x3040..=0x30FF     // Hiragana, Katakana
+        | 0x3130..=0x318F     // Hangul compatibility Jamo
+        | 0x31F0..=0x31FF     // Katakana phonetic extensions
+        | 0x3400..=0x4DBF     // CJK extension A
+        | 0x4E00..=0x9FFF     // CJK unified ideographs
+        | 0xA960..=0xA97F     // Hangul Jamo extended A
+        | 0xAC00..=0xD7FF     // Hangul syllables, Jamo extended B
+        | 0xF900..=0xFAFF     // CJK compatibility ideographs
+        | 0xFF66..=0xFF9F     // halfwidth Katakana
+        | 0xFFA0..=0xFFDC     // halfwidth Hangul
+        | 0x20000..=0x323AF   // CJK extensions B–H
+    )
+}
+
+/// Words of `text`: maximal runs of letters and digits, lowercased, with char offsets. Each Han,
+/// Kana or Hangul character is a word of its own.
 #[must_use]
 pub fn words(text: &str) -> Vec<Word> {
     let mut out = Vec::new();
@@ -31,7 +53,20 @@ pub fn words(text: &str) -> Vec<Word> {
     let mut n = 0;
     for (i, c) in text.chars().enumerate() {
         n = i + 1;
-        if c.is_alphanumeric() {
+        if is_cjk(c) {
+            if !current.is_empty() {
+                out.push(Word {
+                    norm: std::mem::take(&mut current),
+                    start,
+                    end: i,
+                });
+            }
+            out.push(Word {
+                norm: c.to_string(),
+                start: i,
+                end: i + 1,
+            });
+        } else if c.is_alphanumeric() {
             if current.is_empty() {
                 start = i;
             }
@@ -298,6 +333,42 @@ mod tests {
     #[test]
     fn short_quotes_are_flagged_even_when_present() {
         assert_eq!(find("verification gap", TEXT).verdict, Verdict::TooShort);
+    }
+
+    // Regression (eval 2026-11-16, q09): an unspaced Chinese quote was one "word", so a valid
+    // quote was rejected as too short.
+    #[test]
+    fn cjk_characters_are_words() {
+        let ws: Vec<String> = words("用Rust写的工具")
+            .into_iter()
+            .map(|w| w.norm)
+            .collect();
+        assert_eq!(ws, ["用", "rust", "写", "的", "工", "具"]);
+        let text = "前言。这个项目使用 Remotion 渲染视频，因为它出现得早，资料也多。后记";
+        let f = find("这个项目使用 Remotion 渲染视频", text);
+        assert_eq!(f.verdict, Verdict::Exact, "{f:?}");
+        assert_eq!(f.excerpt, "这个项目使用 Remotion 渲染视频");
+        let slip = find(
+            "这个项目使用Remotion渲染视频，因为它出现得很早，资料也多",
+            text,
+        );
+        assert_eq!(slip.verdict, Verdict::Close, "{slip:?}");
+        assert_eq!(find("渲染视频", text).verdict, Verdict::TooShort);
+        assert!(!find("这个项目不使用任何工具渲染图片", text)
+            .verdict
+            .verified());
+        assert_eq!(
+            find(
+                "ひらがなとカタカナのテスト",
+                "前 ひらがなとカタカナのテスト 後"
+            )
+            .verdict,
+            Verdict::Exact
+        );
+        assert_eq!(
+            find("한국어문장검사", "앞 한국어 문장 검사 뒤").verdict,
+            Verdict::Exact
+        );
     }
 
     #[test]

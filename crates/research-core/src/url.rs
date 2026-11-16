@@ -162,6 +162,9 @@ pub fn origin(url: &str) -> Option<String> {
     if DOCUMENT_HOSTS.contains(&p.host.as_str()) {
         return Some(c);
     }
+    if let Some(name) = crate_name(&p.host, p.path) {
+        return Some(format!("crates.io/{name}"));
+    }
     // Raw files speak for the GitHub account that owns them.
     let host = if p.host == "raw.githubusercontent.com" {
         "github.com".to_owned()
@@ -186,6 +189,29 @@ pub fn origin(url: &str) -> Option<String> {
         return Some(host);
     }
     Some(s)
+}
+
+/// The Rust crate a docs.rs or crates.io page is about, normalized (crates.io treats `-` and `_`
+/// as the same name). Each crate is its own author's voice, on either site; `None` for the sites'
+/// own pages (about, releases, users).
+fn crate_name(host: &str, path: &str) -> Option<String> {
+    let mut seg = path.split('/').filter(|s| !s.is_empty());
+    let name = match host {
+        // docs.rs/<crate>/…, docs.rs/crate/<crate>/…
+        "docs.rs" => match seg.next()? {
+            "crate" => seg.next()?,
+            "about" | "releases" | "-" | "static.files" => return None,
+            name => name,
+        },
+        // crates.io/crates/<crate>, crates.io/api/v1/crates/<crate>
+        "crates.io" => match seg.next()? {
+            "crates" => seg.next()?,
+            "api" => seg.find(|&s| s == "crates").and_then(|_| seg.next())?,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(name.to_lowercase().replace('_', "-"))
 }
 
 /// Resolve `href` against the page it appears on (absolute and root-relative links only).
@@ -288,6 +314,35 @@ mod tests {
             "each paper stands alone"
         );
         assert_eq!(site("news.bbc.co.uk"), "bbc.co.uk");
+    }
+
+    // Regression (eval 2026-11-16, q19): docs.rs pages of two crates were one voice ("docs.rs").
+    #[test]
+    fn each_crate_is_its_own_voice() {
+        let o = |u: &str| origin(u).unwrap();
+        assert_ne!(
+            o("https://docs.rs/crate/pyannote-rs/0.3.4"),
+            o("https://docs.rs/crate/speakrs/0.2.1/source/README.md")
+        );
+        assert_eq!(
+            o("https://docs.rs/crate/speakrs/0.2.1"),
+            "crates.io/speakrs"
+        );
+        for u in [
+            "https://docs.rs/speakrs/latest/speakrs/struct.Pipeline.html",
+            "https://docs.rs/Speakrs",
+            "https://crates.io/crates/speakrs",
+            "https://crates.io/api/v1/crates/speakrs/0.2.1/download",
+        ] {
+            assert_eq!(o(u), "crates.io/speakrs", "{u}");
+        }
+        assert_eq!(
+            o("https://docs.rs/pyannote_rs"),
+            o("https://crates.io/crates/pyannote-rs")
+        );
+        assert_eq!(o("https://docs.rs/about/badges"), "docs.rs");
+        assert_eq!(o("https://docs.rs"), "docs.rs");
+        assert_eq!(o("https://crates.io/users/someone"), "crates.io");
     }
 
     #[test]

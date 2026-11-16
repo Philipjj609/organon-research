@@ -6,6 +6,9 @@
 //! - **copied text**: a large share of one's word 5-grams appears in the other (containment, so
 //!   a short post lifting part of a long original is caught, which Jaccard would miss).
 //!
+//! Site furniture shared by every page of a site is not copying: on an arXiv abstract page only
+//! the paper's own part (title, authors, abstract) is compared.
+//!
 //! Paraphrase without links or shared wording is not detected (stated limit): corroboration is
 //! an upper bound on independence, never a proof of it.
 
@@ -18,11 +21,32 @@ pub const SHINGLE: usize = 5;
 /// Share of the smaller text's shingles found in the other that marks a copy.
 pub const COPY_CONTAINMENT: f64 = 0.5;
 
-/// Hashed word 5-grams of a text (FNV-1a, stable across runs and platforms).
+/// Hashed word 5-grams of a text's own words (FNV-1a, stable across runs and platforms).
 #[must_use]
 pub fn shingles(text: &str) -> HashSet<u64> {
+    let text = arxiv_abstract(text).unwrap_or(text);
     let w: Vec<String> = words(text).into_iter().map(|w| w.norm).collect();
     w.windows(SHINGLE).map(|g| fnv(&g.join(" "))).collect()
+}
+
+/// On an arXiv abstract page (also reached through a DOI), the paper's own part: from `Title:`
+/// to the end of the abstract. The navigation, license and arXivLabs text around it is the same
+/// on every abstract page and would make any two papers look copied. `None` for other pages.
+#[must_use]
+pub fn arxiv_abstract(text: &str) -> Option<&str> {
+    let abs = text.find("\nAbstract:")?;
+    let start = text[..abs].find("Title:")?;
+    let end = [
+        "\nComments:",
+        "\nSubjects:",
+        "\nCite as:",
+        "\nSubmission history",
+    ]
+    .iter()
+    .filter_map(|m| text[abs..].find(m))
+    .min()?;
+    text.contains("arXiv:")
+        .then(|| text[start..abs + end].trim_end())
 }
 
 fn fnv(s: &str) -> u64 {
@@ -176,6 +200,59 @@ mod tests {
             .any(|(i, j, l)| (*i, *j) == (0, 1) && matches!(l, Link::Copies(c) if *c >= 0.5)));
         assert!(joins.contains(&(0, 2, Link::Cites)));
         assert!(joins.contains(&(0, 4, Link::SameOrigin)));
+    }
+
+    /// An arXiv abstract page: the paper's part between site furniture that every such page shares.
+    fn arxiv_page(id: &str, title: &str, author: &str, abstract_: &str) -> String {
+        let furniture = "Bookmark this page and explore tools that are offered by our partners. \
+            Each toggle below enables an optional feature built by a collaborator, and none of them \
+            is endorsed by the archive. Learn more about the program and the values that every \
+            partner has agreed to uphold, including openness, community, excellence and privacy. \
+            Have an idea for a project that would help readers? Tell us about it today.";
+        format!(
+            "Computer Science > Software Engineering\n\narXiv:{id} (cs)\n\nTitle:{title}\n\n\
+             Authors:{author}\n\nView PDF\nHTML (experimental)\n\nAbstract:{abstract_}\n\n\
+             Comments:\n12 pages\n\nSubjects:\nSoftware Engineering (cs.SE)\n\n\
+             Submission history\nFrom: {author}\n\n{furniture}\n\n{furniture} {furniture}"
+        )
+    }
+
+    // Regression (eval 2026-11-16, q07): two different papers' abstract pages shared over half
+    // their 5-grams (navigation, license, arXivLabs text) and were merged into one voice.
+    #[test]
+    fn arxiv_page_furniture_is_not_copying() {
+        let a = arxiv_page(
+            "2601.00001",
+            "Planning in Research Agents",
+            "Ada Lin, Bo Park",
+            "We study how research agents break a question into steps and when they stop searching.",
+        );
+        let b = arxiv_page(
+            "2601.00002",
+            "Auditing Citations in Generated Reports",
+            "Cy Moreau",
+            "We measure how often a cited source actually supports the sentence it is attached to.",
+        );
+        let words_only = |t: &str| -> HashSet<u64> {
+            let w: Vec<String> = words(t).into_iter().map(|w| w.norm).collect();
+            w.windows(SHINGLE).map(|g| fnv(&g.join(" "))).collect()
+        };
+        assert!(
+            containment(&words_only(&a), &words_only(&b)) >= COPY_CONTAINMENT,
+            "the furniture alone looks like copying"
+        );
+        assert!(arxiv_abstract(&a)
+            .unwrap()
+            .ends_with("when they stop searching."));
+        assert!(containment(&shingles(&a), &shingles(&b)) < COPY_CONTAINMENT / 2.0);
+
+        // A page that does copy the abstract is still caught.
+        let blog = format!(
+            "My notes. {} Worth a read.",
+            arxiv_abstract(&a).unwrap().replace("Title:", "")
+        );
+        assert!(containment(&shingles(&a), &shingles(&blog)) >= COPY_CONTAINMENT);
+        assert_eq!(arxiv_abstract(ORIGINAL), None);
     }
 
     #[test]

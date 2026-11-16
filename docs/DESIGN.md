@@ -33,7 +33,7 @@ flowchart TB
 
 ## Passage verification (`matching`)
 
-- Text and passage become sequences of lowercased letter/digit words, each with its character range. Case, punctuation, curly quotes, dashes, line breaks and markup therefore don't matter.
+- Text and passage become sequences of lowercased letter/digit words, each with its character range. Case, punctuation, curly quotes, dashes, line breaks and markup therefore don't matter. Chinese, Japanese and Korean characters each count as one word, because those scripts don't put spaces between words.
 - **Exact:** the word sequence occurs contiguously.
 - **Close:** at least 85% of the passage's words occur *in order* (longest common subsequence) within a window around the best bag-of-words match. This allows an elision or a typo.
 - **Partial** (50–85%) and **Missing** are not verified. Under 6 words is **TooShort**, because a fragment can't carry a claim.
@@ -45,9 +45,9 @@ Tests pin the behaviour. Reordered words fail, a paraphrase fails, an invention 
 ## Independence (`independence`)
 
 Sources join one group when any of these holds:
-- **Same origin.** One company or author: the site; on GitHub, X, Medium and YouTube, host + author; on tenant hosts like `*.substack.com`, the subdomain; on arXiv, DOI and HN, each document stands alone.
+- **Same origin.** One company or author: the site; on GitHub, X, Medium and YouTube, host + author; on tenant hosts like `*.substack.com`, the subdomain; on docs.rs and crates.io, the crate; on arXiv, DOI and HN, each document stands alone.
 - **One links to the other's canonical URL.**
-- **Copied text.** At least 50% of the smaller document's word 5-grams appear in the other. Containment rather than Jaccard, so a short post that lifts part of a long article is caught.
+- **Copied text.** At least 50% of the smaller document's word 5-grams appear in the other. Containment rather than Jaccard, so a short post that lifts part of a long article is caught. Site furniture is not copying: on an arXiv abstract page only the title, authors and abstract are compared.
 
 Limit: a paraphrase with no link and no shared wording is not detected. Voice counts are an upper bound on independence.
 
