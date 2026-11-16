@@ -6,6 +6,7 @@
 //! - [`independence`]: which sources are one voice (same origin, citation, copied text).
 //! - [`analysis`]: corroboration per claim, flags, saturation, next steps, the status report.
 //! - [`export`]: protocol messages and a proposal for memory.
+//! - [`eval`]: score a run stage by stage against an evaluation case.
 //! - [`search`], [`text`], [`url`]: backend parsers, HTML to text, canonical URLs and origins.
 //!
 //! No network, no files, no printing: the CLI fetches and stores, the reader (a model or a
@@ -14,6 +15,7 @@
 #![forbid(unsafe_code)]
 
 pub mod analysis;
+pub mod eval;
 pub mod export;
 pub mod independence;
 pub mod ledger;

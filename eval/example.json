@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "ocr-code",
+      "question": "Which open-source OCR reads source code in screenshots best?",
+      "provenance": "example (not a real person's question)",
+      "effort": "lookup",
+      "aspects": [
+        { "text": "accuracy on code specifically", "terms": ["code"] },
+        { "text": "open-source engines compared", "terms": ["tesseract|paddleocr|easyocr|ocrs"] }
+      ],
+      "expected_sources": [
+        { "url": "https://github.com/tesseract-ocr/tesseract", "why": "the default engine" }
+      ],
+      "key_facts": [
+        { "text": "Tesseract is weak on code", "terms": ["tesseract", "code"], "basis": "example" }
+      ]
+    },
+    {
+      "id": "not-run-yet",
+      "question": "A question with no run and no gold: every stage is unknown.",
+      "effort": "lookup"
+    }
+  ]
+}

@@ -90,4 +90,4 @@ General web search stays with the agent's own tool; its results come in through 
 - **Script-rendered pages and publisher walls fail.** The failure is recorded; finding an open copy is the reader's job. A headless browser would be organon-vision/text territory.
 - **No model in the loop.** Planning, reading and the entailment judgment ("does this passage *support* the claim, or only contain the words?") stay with the reader. An optional verifier model (cheap model judges entailment, strong model plans) is the next step.
 - **Source reliability is static.** It should learn from outcomes: sources whose claims held up gain trust.
-- **No evaluation set yet.** About 20 real questions, each stage scored separately, with cost.
+- **Evaluation is lexical.** `organon-research eval` ([eval/README.md](../eval/README.md)) scores plan, retrieval, source quality, alignment and synthesis per run by term and URL matching, with spend. Alignment is containment, not entailment, until a verifier model exists.

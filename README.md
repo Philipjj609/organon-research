@@ -38,6 +38,7 @@ $R cite $X C1 S45 "the default choice in previous work, Tesseract, was never in 
 $R search $X openalex Tesseract 5 accuracy code --challenges C1
 $R status $X                                            # voices, flags, saturation, next steps
 $R export $X --about concept:ocr --name "OCR"           # → messages.jsonl + proposal.json
+$R eval set.json --out results.json                     # score runs stage by stage (eval/README.md)
 ```
 
 For agents, the full loop and its rules are in [skills/research/SKILL.md](skills/research/SKILL.md). PDFs need `pdftotext` (poppler) on PATH.

@@ -116,6 +116,21 @@ enum Cmd {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Score runs against an evaluation set, stage by stage (plan, retrieval, source quality,
+    /// alignment, synthesis), with what each run spent
+    Eval {
+        /// The evaluation set (JSON; see eval/README.md)
+        set: PathBuf,
+        /// Cost measured outside the ledger, per case id: {"q07": {"tokens": 99070, "seconds": 94}}
+        #[arg(long)]
+        costs: Option<PathBuf>,
+        /// Write the scores as JSON
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Append one research episode per scored case (organon-protocol JSONL)
+        #[arg(long)]
+        episodes: Option<PathBuf>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -178,6 +193,12 @@ fn main() -> anyhow::Result<()> {
         } => cite(&run, &claim, &source, &passage, against),
         Cmd::Status { run } => status(&run),
         Cmd::Export { run, about, name } => export_run(&run, &about, name.as_deref()),
+        Cmd::Eval {
+            set,
+            costs,
+            out,
+            episodes,
+        } => eval_set(&set, costs.as_deref(), out.as_deref(), episodes.as_deref()),
     }
 }
 
@@ -635,6 +656,93 @@ fn export_run(arg: &str, about: &str, name: Option<&str>) -> anyhow::Result<()> 
         println!("still open: {}", next.join("; "));
     }
     println!("then: mneme ingest messages.jsonl && mneme digest proposal.json (review the proposal first)");
+    Ok(())
+}
+
+// ---- evaluation ----------------------------------------------------------------------------
+
+fn eval_set(
+    set_path: &Path,
+    costs: Option<&Path>,
+    out: Option<&Path>,
+    episodes: Option<&Path>,
+) -> anyhow::Result<()> {
+    use organon_research_core::eval::{self, CaseScore, EvalSet, Measured, STAGES};
+    let set = EvalSet::parse(
+        &fs::read_to_string(set_path).with_context(|| format!("reading {}", set_path.display()))?,
+    )
+    .with_context(|| format!("parsing {}", set_path.display()))?;
+    let costs: HashMap<String, Measured> = match costs {
+        Some(p) => serde_json::from_str(
+            &fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?,
+        )
+        .with_context(|| format!("parsing {}", p.display()))?,
+        None => HashMap::new(),
+    };
+    let base = set_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut scores = Vec::new();
+    let mut lines = String::new();
+    for case in &set.cases {
+        let Some(arg) = &case.run else {
+            scores.push(CaseScore::not_run(case));
+            continue;
+        };
+        // A relative run folder is read next to the set first, then as usual.
+        let near = base.join(arg);
+        let arg = if near.join("run.json").exists() {
+            near.to_string_lossy().into_owned()
+        } else {
+            arg.clone()
+        };
+        let (dir, r) = load(&arg).with_context(|| format!("case {}", case.id))?;
+        let a = analyse(&r, &texts(&dir, &r));
+        let s = eval::score(
+            case,
+            &r,
+            &a,
+            costs.get(&case.id).cloned().unwrap_or_default(),
+        );
+        if episodes.is_some() {
+            let (started, ended) = eval::span(&r);
+            let m = organon_protocol::Message::Episode(eval::episode(&s, &started, &ended));
+            lines.push_str(&serde_json::to_string(&m)?);
+            lines.push('\n');
+        }
+        scores.push(s);
+    }
+    print!("{}", eval::render(&scores));
+    if let Some(p) = out {
+        let means: serde_json::Map<String, serde_json::Value> = STAGES
+            .iter()
+            .map(|st| {
+                let (m, n) = eval::mean(&scores, st);
+                ((*st).to_owned(), serde_json::json!({ "mean": m, "n": n }))
+            })
+            .collect();
+        let body = serde_json::json!({
+            "set": set_path.to_string_lossy(),
+            "scored_at": clock::now(),
+            "tool": concat!("organon-research@", env!("CARGO_PKG_VERSION")),
+            "means": means,
+            "cases": scores,
+        });
+        fs::write(p, serde_json::to_string_pretty(&body)?)?;
+        println!("{}", p.display());
+    }
+    if let Some(p) = episodes {
+        use std::io::Write as _;
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+            .with_context(|| format!("opening {}", p.display()))?
+            .write_all(lines.as_bytes())?;
+        println!(
+            "{} episodes appended to {}",
+            lines.lines().count(),
+            p.display()
+        );
+    }
     Ok(())
 }
 
